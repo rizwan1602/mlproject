@@ -10,6 +10,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.model_selection import GridSearchCV
 
 
 from src.logger import logging
@@ -27,21 +28,36 @@ def save_object(file_path, obj):
     except Exception as e:
         raise CustomException(e, sys)
 
-def evaluate_model(X_train, y_train, X_test, y_test, model):
+def evaluate_model(X_train, y_train, X_test, y_test, model, params):
     model_report = {}
     for model_name, model_instance in model.items():
         try:
             logging.info(f'Training {model_name}')
-            model_instance.fit(X_train, y_train)
-            y_pred = model_instance.predict(X_test)
+
+            # Check if specific model parameters are provided
+            current_params = params.get(model_name, {})
+            
+            # Perform grid search only if parameters are provided
+            if current_params:
+                gs = GridSearchCV(model_instance, current_params, cv=3)
+                gs.fit(X_train, y_train)
+                best_model = gs.best_estimator_
+            else:
+                best_model = model_instance
+                best_model.fit(X_train, y_train)
+
+            y_pred = best_model.predict(X_test)
             model_report[model_name] = r2_score(y_test, y_pred)
 
-            
             logging.info(f'{model_name} trained successfully')
 
-            
         except Exception as e:
-            logging.error(f'Error occurred while training {model_name}')
-            logging.error(e)
-            raise CustomException(f'Error occurred while training {model_name}')
+            raise CustomException(e, sys.exc_info())
     return model_report
+
+def load_object(file_path):
+    try:
+        with open(file_path, 'rb') as file:
+            return pickle.load(file)
+    except Exception as e:
+        raise CustomException(e, sys)
